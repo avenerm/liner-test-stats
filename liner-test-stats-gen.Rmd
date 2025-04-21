@@ -1,10 +1,11 @@
 ---
-title: Liner Testing Stats Visualization
-output: html_notebook
+title: "Liner Testing Stats Visualization"
+output:
+  html_document:
+    df_print: paged
 ---
 
 
-Import packages, set options and define functions
 ```{r setup}
 # Import packages
 library(tidyverse)
@@ -17,8 +18,8 @@ library(ggeasy)
 opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 # Round values in tables to 2 digits
-kable <- function(data) {
-  knitr::kable(data, digits = 2)
+kable <- function(data, caption = "") {
+  knitr::kable(data, digits = 3, caption = caption)
 }
 
 # Function to read date from Excel
@@ -33,7 +34,7 @@ prop_from_percent <- function(char_percent) {
 ```
 
 
-Import the data and prep it for visualization.
+
 ```{r prep}
 
 
@@ -63,7 +64,7 @@ systems <- systems %>%
     contractor = toupper(contractor),
     sys_depth = as.numeric(sys_depth),
     sys_area = as.numeric(gsub(",", "", sys_area)),
-    tests_to_pass = as.numeric(tests_to_pass),
+    tests_to_pass = factor(as.numeric(tests_to_pass), levels = seq(1, max(as.numeric(tests_to_pass), na.rm=TRUE))),
     first_test_date = date_1,
     last_test_date = pmax(date_1, date_2, date_3, date_4, date_5, date_6, date_7, date_8, date_9, na.rm = TRUE)
   )
@@ -95,15 +96,17 @@ systems <- systems %>%
 
 ```
 
-Table of tests by year
+
 ```{r tests_by_year}
 kable(
   tests %>%
     group_by("Fiscal Year" = FY) %>%
-    summarize("No. of Tests" = n(), "No. of Systems" = n_distinct(sys_id))
+    summarize("No. of Tests" = n(), "No. of Systems" = n_distinct(sys_id)),
+  caption = "Liner Performance Tests by Fiscal Year"
 )
 ```
-Bar chart of tests by year
+
+
 ```{r tests_by_year_chart}
 tests_by_year_df <-   
   tests %>%
@@ -123,49 +126,71 @@ ggplot(tests_by_year_df, aes(x = FY, y = Value, fill = Stat)) +
   theme(text = element_text(size= 14), legend.position = "bottom") 
 
 ```
-Table of number of tests to pass
+
+
 ```{r tests_to_pass}
-kable(
-  filter(systems, !is.na(tests_to_pass)) %>%
-  group_by("Number of Tests" = tests_to_pass) %>%
+
+#All years
+all_sys_passed <- filter(systems, !is.na(tests_to_pass)) %>%
+  group_by("Number of Tests" = tests_to_pass, .drop = FALSE) %>%
   summarize(
     "Number of Systems" = n(), 
-    "Percentage of Total" = percent(n()/nrow(filter(systems, !is.na(tests_to_pass))))
+    "Percentage of Total" = percent(n()/nrow(filter(systems, !is.na(tests_to_pass))), accuracy = 0.1))
+kable(all_sys_passed, caption = "Number of Tests to Pass: All Years")
+
+
+#FY23 Only
+sys_fy23_passed <- filter(systems, !is.na(tests_to_pass) & year(first_test_date) == 2023) %>%
+  group_by("Number of Tests" = tests_to_pass, .drop = FALSE) %>%
+  summarize(
+    "Number of Systems" = n(), 
+    "Percentage of Total" = percent(n()/nrow(.), accuracy = 0.1)
   )
-)
+kable(sys_fy23_passed, caption = "Number of Tests to Pass: FY23 Only")
+
+#FY24 Only
+sys_fy24_passed <- filter(systems, !is.na(tests_to_pass) & year(first_test_date) == 2024) %>%
+  group_by("Number of Tests" = tests_to_pass, .drop = FALSE) %>%
+  summarize(
+    "Number of Systems" = n(), 
+    "Percentage of Total" = percent(n()/nrow(.), accuracy = 0.1)
+  )
+kable(sys_fy24_passed, caption = "Number of Tests to Pass: FY24 Only")
+
+#FY25 Only
+sys_fy25_passed <- filter(systems, !is.na(tests_to_pass) & year(first_test_date) == 2025) %>%
+  group_by("Number of Tests" = tests_to_pass, .drop = FALSE) %>%
+  summarize(
+    "Number of Systems" = n(), 
+    "Percentage of Total" = percent(n()/nrow(.), accuracy = 0.1)
+  )
+kable(sys_fy25_passed, caption = "Number of Tests to Pass: FY25 Only")
 ```
 
-
-Table of number of tests to pass by year
 ```{r tests_to_pass_by_year}
-kable(
-  systems %>%
+ave_tests_to_pass_by_yr <-  systems %>%
   group_by("Fiscal Year of First Test" = 
              ifelse(month(first_test_date)>6, year(first_test_date)+1, year(first_test_date))) %>%
   summarize("Number of Systems Passed" = n(), 
             "Average Number of Tests to Pass" = mean(tests_to_pass, na.rm = TRUE))
-)
+kable(ave_tests_to_pass_by_yr, caption = "Average Number of Tests to Pass by Fiscal Year")
 ```
 
-Table of tests to pass by contractor
 ```{r tests_to_pass_by_contractor}
-kable(
-  filter(systems, !is.na(tests_to_pass)) %>%
+ave_tests_to_pass_by_contractor <- filter(systems, !is.na(tests_to_pass)) %>%
     group_by("Contractor" = contractor) %>%
     summarize("Total Systems Passed" = n(), "Average Tests to Pass" = mean(tests_to_pass)) %>%
     arrange(select(.,3))
-)
+kable(ave_tests_to_pass_by_contractor, caption = "Average Number of Tests to Pass by Contractor")
 ```
 
-Recession rate by year table 
 ```{r}
-kable(
-tests %>%
+med_rr_by_yr <- tests %>%
 group_by("Fiscal Year" = FY) %>%
-summarize("Median of Max Recession Rate" = median(rr, na.rm = TRUE)))
+summarize("Median of Max Recession Rate" = median(rr, na.rm = TRUE))
+kable(med_rr_by_yr, caption = "Median of Max Recession Rate by Year")
 ```
 
-Recession rate timeseries plot
 ```{r}
 fy_starts <- seq(from = date_from_char("7/1/2020"), by = "year", length.out = 5)
 ggplot(data = tests, mapping = aes(x = date, y = rr, color = result)) + 
@@ -185,10 +210,8 @@ ggplot(data = tests, mapping = aes(x = date, y = rr, color = result)) +
 ```
 
 
-Percent filled timeseries plot
 ```{r}
 
-fy_starts <- seq(from = date_from_char("7/1/2020"), by = "year", length.out = 5)
 ggplot(data = tests, mapping = aes(x = date, y = filled, color = result)) + 
   geom_point() + 
   scale_y_continuous(breaks = seq(0, 1.5, by=0.25), limits = c(0,max(max(tests$filled), 1.5)), 
