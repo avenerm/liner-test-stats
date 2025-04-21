@@ -11,6 +11,7 @@ library(tidyverse)
 library(knitr)
 library(bit)
 library(scales)
+library(ggeasy)
 
 # Suppress warnings
 opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
@@ -67,7 +68,6 @@ systems <- systems %>%
     last_test_date = pmax(date_1, date_2, date_3, date_4, date_5, date_6, date_7, date_8, date_9, na.rm = TRUE)
   )
 
-
 # Create tests dataframe with one row per test and remove rows without test data
 tests <- pivot_longer(systems,
   cols = 5:28,
@@ -76,12 +76,13 @@ tests <- pivot_longer(systems,
   select(-tests_to_pass, -first_test_date) %>%
   filter(!is.na(date))
 
-
-# Remove "status" col and add "result" col indicating whether test passed
+# Remove "status" col and add "result" col indicating whether test passed. Add FY 
 tests <- tests %>%
   group_by(sys_id) %>%
-    mutate(result = lag(status, n=length(status)-1, default="Fail")) %>% 
-      select(-status)
+    mutate(
+      result = lag(status, n=length(status)-1, default="Fail"),
+      FY = ifelse(month(date)>6, year(date)+1, year(date))) %>%
+    select(-status)
 
 # Remove test data from systems dataframe
 systems <- systems %>%
@@ -98,11 +99,30 @@ Table of tests by year
 ```{r tests_by_year}
 kable(
   tests %>%
-  group_by("Year" = year(date)) %>%
-  summarize("Total Tests" = n(), "Passing Tests" = sum(result == "Pass"))
+    group_by("Fiscal Year" = FY) %>%
+    summarize("No. of Tests" = n(), "No. of Systems" = n_distinct(sys_id))
 )
 ```
+Bar chart of tests by year
+```{r tests_by_year_chart}
+tests_by_year_df <-   
+  tests %>%
+    group_by(FY) %>%
+    summarize("No. of Tests" = n(), "No. of Systems" = n_distinct(sys_id)) %>%
+    gather("Stat", "Value", -FY)
 
+
+ggplot(tests_by_year_df, aes(x = FY, y = Value, fill = Stat)) + 
+  geom_col(position = "dodge") + 
+  geom_text(aes(x=FY, Value, label = Value),
+            vjust = -.5, color = "black", position = position_dodge(0.9)) + 
+  scale_y_continuous(breaks = seq(from = 0, to = 150, by = 25), minor_breaks = 25, limits = c(0,150)) +
+  scale_x_discrete(limits = seq(min(year(tests$date)), max(year(tests$date)))) + 
+  labs(title = "Liner Performance Tests by Fiscal Year", x = "Fiscal Year", y = "", fill = "") + 
+  ggeasy::easy_center_title() + 
+  theme(text = element_text(size= 14), legend.position = "bottom") 
+
+```
 Table of number of tests to pass
 ```{r tests_to_pass}
 kable(
@@ -120,7 +140,8 @@ Table of number of tests to pass by year
 ```{r tests_to_pass_by_year}
 kable(
   systems %>%
-  group_by("Year" = year(first_test_date)) %>%
+  group_by("Fiscal Year of First Test" = 
+             ifelse(month(first_test_date)>6, year(first_test_date)+1, year(first_test_date))) %>%
   summarize("Number of Systems Passed" = n(), 
             "Average Number of Tests to Pass" = mean(tests_to_pass, na.rm = TRUE))
 )
@@ -131,7 +152,8 @@ Table of tests to pass by contractor
 kable(
   filter(systems, !is.na(tests_to_pass)) %>%
     group_by("Contractor" = contractor) %>%
-    summarize("Total Systems Passed" = n(), "Average Tests to Pass" = mean(tests_to_pass))
+    summarize("Total Systems Passed" = n(), "Average Tests to Pass" = mean(tests_to_pass)) %>%
+    arrange(select(.,3))
 )
 ```
 
@@ -139,36 +161,47 @@ Recession rate by year table
 ```{r}
 kable(
 tests %>%
-group_by("Year" = year(date)) %>%
+group_by("Fiscal Year" = FY) %>%
 summarize("Median of Max Recession Rate" = median(rr, na.rm = TRUE)))
 ```
 
 Recession rate timeseries plot
 ```{r}
+fy_starts <- seq(from = date_from_char("7/1/2020"), by = "year", length.out = 5)
 ggplot(data = tests, mapping = aes(x = date, y = rr, color = result)) + 
   geom_point() + 
-  stat_smooth(method = "lm", formula = y~x, se=FALSE) + 
-  geom_hline(yintercept = 1) + 
-  scale_x_date(date_breaks = "1 year",
+  scale_y_continuous(breaks = seq(from = 0, to = 16, by = 2), limits = c(0, 16)) +
+  stat_smooth(method = "lm", formula = y~x, se=FALSE, linetype = "dashed", color = "black") + 
+  annotate("text", x = date_from_char("5/1/2020"), y = 4.4, label = "Linear Fit", angle = -4) + 
+  geom_hline(yintercept = 1, linetype = "dashed") + 
+  annotate("text", x = date_from_char("2/15/2020"), y = 0.6, label = "1 in/hr Limit") + 
+  scale_x_date(breaks = fy_starts,
                date_minor_breaks = "3 months",
-               limits = c(date_from_char("1/1/2020"), date_from_char("6/1/2024"))
+               limits = c(date_from_char("1/1/2020"), date_from_char("4/1/2025"))
   ) +
-  labs(x = "Date", y = "Maximum Recession Rate (in/hr)")
+  labs(title = "Timeseries of Max Recession Rates", x = "Date", y = "Maximum Recession Rate (in/hr)") + 
+  theme(legend.position = "bottom", plot.title = element_text(size = 12), legend.title=element_blank()) + 
+  ggeasy::easy_center_title()
 ```
 
 
 Percent filled timeseries plot
 ```{r}
+
+fy_starts <- seq(from = date_from_char("7/1/2020"), by = "year", length.out = 5)
 ggplot(data = tests, mapping = aes(x = date, y = filled, color = result)) + 
   geom_point() + 
-  stat_smooth(method = "lm", formula = y~x, se=FALSE) + 
-  geom_hline(yintercept = 1) + 
-  scale_y_continuous(breaks = seq(0, 1.5, by=0.25),
-                     limits = c(0,max(max(tests$filled), 1.5)), 
-                     labels = percent) + 
-  scale_x_date(date_breaks = "1 year",
+  scale_y_continuous(breaks = seq(0, 1.5, by=0.25), limits = c(0,max(max(tests$filled), 1.5)), 
+                     labels = percent) +
+  stat_smooth(method = "lm", formula = y~x, se=FALSE, linetype = "dashed", color = "black") + 
+  annotate("text", x = date_from_char("2/15/2021"), y = 0.835, label = "Linear Fit", angle = 3) + 
+  geom_hline(yintercept = 1, linetype = "dashed") + 
+  annotate("text", x = date_from_char("5/1/2020"), y = 1.06, label = "1 in/hr Limit") + 
+  scale_x_date(breaks = fy_starts,
                date_minor_breaks = "3 months",
-               limits = c(date_from_char("1/1/2020"), date_from_char("6/1/2024"))
-  ) + 
-  labs(x = "Date", y = "Percent of Storage Depth Filled")
+               limits = c(date_from_char("1/1/2020"), date_from_char("4/1/2025"))
+  ) +
+  labs(title = "Timeseries of Percent Storage Depth Filled", x = "Date", y = "Percent Filled") + 
+  theme(legend.position = "bottom", plot.title = element_text(size = 12), legend.title=element_blank()) + 
+  ggeasy::easy_center_title()
 ```
