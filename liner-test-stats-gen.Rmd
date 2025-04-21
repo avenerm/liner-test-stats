@@ -1,0 +1,174 @@
+---
+title: Liner Testing Stats Visualization
+output: html_notebook
+---
+
+
+Import packages, set options and define functions
+```{r setup}
+# Import packages
+library(tidyverse)
+library(knitr)
+library(bit)
+library(scales)
+
+# Suppress warnings
+opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Round values in tables to 2 digits
+kable <- function(data) {
+  knitr::kable(data, digits = 2)
+}
+
+# Function to read date from Excel
+date_from_char <- function(char_date) {
+  date <- as.Date(char_date, "%m/%d/%Y")
+}
+
+# Function to read percent from Excel
+prop_from_percent <- function(char_percent) {
+  prop <- as.numeric(gsub("%", "", char_percent))/100
+}
+```
+
+
+Import the data and prep it for visualization.
+```{r prep}
+
+
+# Read file and select relevant data
+systems <- read_csv("Liner Test Tracking & Projections.csv", col_names = TRUE, skip = 5) %>%
+  select(sys_id = 3, contractor = 15, sys_depth = 17, sys_area = 18, 
+         date_1 = 21, depth_1 = 25, filled_1 = 23, rr_1 = 24,
+         date_2 = 27, depth_2 = 28, filled_2 = 29, rr_2 = 30,
+         date_3 = 33, depth_3 = 34, filled_3 = 35, rr_3 = 36,
+         date_4 = 39, depth_4 = 40, filled_4 = 41, rr_4 = 42,
+         date_5 = 45, depth_5 = 46, filled_5 = 47, rr_5 = 48,
+         date_6 = 51, depth_6 = 52, filled_6 = 53, rr_6 = 54,
+         date_7 = 57, depth_7 = 58, filled_7 = 59, rr_7 = 60,
+         date_8 = 63, depth_8 = 64, filled_8 = 65, rr_8 = 66,
+         date_9 = 69, depth_9 = 70, filled_9 = 71, rr_9 = 72,
+         status = 75, tests_to_pass = 76)
+
+# Remove systems that haven't been tested
+systems <- systems %>%
+  filter(date_1 != "") 
+
+# Clean up data and change types as needed
+systems <- systems %>% 
+  mutate(across(contains("date"), date_from_char)) %>%
+  mutate(across(contains("filled"), prop_from_percent)) %>%
+  mutate(
+    contractor = toupper(contractor),
+    sys_depth = as.numeric(sys_depth),
+    sys_area = as.numeric(gsub(",", "", sys_area)),
+    tests_to_pass = as.numeric(tests_to_pass),
+    first_test_date = date_1,
+    last_test_date = pmax(date_1, date_2, date_3, date_4, date_5, date_6, date_7, date_8, date_9, na.rm = TRUE)
+  )
+
+
+# Create tests dataframe with one row per test and remove rows without test data
+tests <- pivot_longer(systems,
+  cols = 5:28,
+  names_to = c(".value","test_num"),
+  names_sep = "_",) %>% 
+  select(-tests_to_pass, -first_test_date) %>%
+  filter(!is.na(date))
+
+
+# Remove "status" col and add "result" col indicating whether test passed
+tests <- tests %>%
+  group_by(sys_id) %>%
+    mutate(result = lag(status, n=length(status)-1, default="Fail")) %>% 
+      select(-status)
+
+# Remove test data from systems dataframe
+systems <- systems %>%
+  select(-contains("date_")) %>%
+  select(-contains("depth_")) %>%
+  select(-contains("filled_")) %>%
+  select(-contains("rr_")) %>%
+  relocate(first_test_date, .after = sys_id) %>%
+  relocate(last_test_date, .after = first_test_date)  
+
+```
+
+Table of tests by year
+```{r tests_by_year}
+kable(
+  tests %>%
+  group_by("Year" = year(date)) %>%
+  summarize("Total Tests" = n(), "Passing Tests" = sum(result == "Pass"))
+)
+```
+
+Table of number of tests to pass
+```{r tests_to_pass}
+kable(
+  filter(systems, !is.na(tests_to_pass)) %>%
+  group_by("Number of Tests" = tests_to_pass) %>%
+  summarize(
+    "Number of Systems" = n(), 
+    "Percentage of Total" = percent(n()/nrow(filter(systems, !is.na(tests_to_pass))))
+  )
+)
+```
+
+
+Table of number of tests to pass by year
+```{r tests_to_pass_by_year}
+kable(
+  systems %>%
+  group_by("Year" = year(first_test_date)) %>%
+  summarize("Number of Systems Passed" = n(), 
+            "Average Number of Tests to Pass" = mean(tests_to_pass, na.rm = TRUE))
+)
+```
+
+Table of tests to pass by contractor
+```{r tests_to_pass_by_contractor}
+kable(
+  filter(systems, !is.na(tests_to_pass)) %>%
+    group_by("Contractor" = contractor) %>%
+    summarize("Total Systems Passed" = n(), "Average Tests to Pass" = mean(tests_to_pass))
+)
+```
+
+Recession rate by year table 
+```{r}
+kable(
+tests %>%
+group_by("Year" = year(date)) %>%
+summarize("Median of Max Recession Rate" = median(rr, na.rm = TRUE)))
+```
+
+Recession rate timeseries plot
+```{r}
+ggplot(data = tests, mapping = aes(x = date, y = rr, color = result)) + 
+  geom_point() + 
+  stat_smooth(method = "lm", formula = y~x, se=FALSE) + 
+  geom_hline(yintercept = 1) + 
+  scale_x_date(date_breaks = "1 year",
+               date_minor_breaks = "3 months",
+               limits = c(date_from_char("1/1/2020"), date_from_char("6/1/2024"))
+  ) +
+  labs(x = "Date", y = "Maximum Recession Rate (in/hr)")
+```
+
+
+Percent filled timeseries plot
+```{r}
+ggplot(data = tests, mapping = aes(x = date, y = filled, color = result)) + 
+  geom_point() + 
+  stat_smooth(method = "lm", formula = y~x, se=FALSE) + 
+  geom_hline(yintercept = 1) + 
+  scale_y_continuous(breaks = seq(0, 1.5, by=0.25),
+                     limits = c(0,max(max(tests$filled), 1.5)), 
+                     labels = percent) + 
+  scale_x_date(date_breaks = "1 year",
+               date_minor_breaks = "3 months",
+               limits = c(date_from_char("1/1/2020"), date_from_char("6/1/2024"))
+  ) + 
+  labs(x = "Date", y = "Percent of Storage Depth Filled")
+```
