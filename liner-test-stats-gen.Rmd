@@ -1,28 +1,22 @@
 ---
-title: "Liner Testing Stats Visualization"
+title: "Liner Testing Stats Visualization: April 2025"
 output:
   html_document:
     df_print: paged
     code_folding: show
   pdf_document: default
 ---
-
+This notebook generates tables and visuals related to the Philadelphia Water Department's construction phase testing program for lined green stormwater infrastructure. It includes data on tests through April 16th, 2025.
 
 ```{r setup}
 # Import packages
+suppressWarnings({
 library(tidyverse)
 library(knitr)
 library(bit)
 library(scales)
-library(ggeasy)
-
-# Suppress warnings
-opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
-
-# Round values in tables to 2 digits
-#kable <- function(data, caption = "") {
-#  knitr::kable(data, digits = 2, caption = caption)
-#}
+#library(ggeasy)
+})
 
 # Function to read date from Excel
 date_from_char <- function(char_date) {
@@ -39,9 +33,8 @@ prop_from_percent <- function(char_percent) {
 
 ```{r prep}
 
-
 # Read file and select relevant data
-systems <- read_csv("Liner Test Tracking & Projections.csv", col_names = TRUE, skip = 5) %>%
+systems <- read_csv("Liner Test Tracking & Projections.csv", col_names = TRUE, skip = 5, show_col_types = FALSE) %>%
   select(sys_id = 3, contractor = 15, sys_depth = 17, sys_area = 18, 
          date_1 = 21, depth_1 = 25, filled_1 = 23, rr_1 = 24,
          date_2 = 27, depth_2 = 28, filled_2 = 29, rr_2 = 30,
@@ -99,6 +92,7 @@ systems <- systems %>%
   relocate(last_test_date, .after = first_test_date)  
 
 ```
+The following table and chart show the breakdown of the number of liner tests performed each fiscal year, and the number of systems that had their first test in each fiscal year.
 
 
 ```{r tests_by_year}
@@ -107,12 +101,10 @@ kable(
     group_by(FY) %>%
     summarize(num_tests = n(), num_sys = n_distinct(sys_id)),
   col.names = c("Fiscal Year", "Number of Tests", "Number of Systems"),
-  caption = "Liner Performance Tests by Fiscal Year"
+  caption = "Liner Performance Tests by Fiscal Year",
+  align = 'l'
 )
-```
 
-
-```{r tests_by_year_chart}
 tests_by_year_df <-   
   tests %>%
     group_by(FY) %>%
@@ -131,7 +123,9 @@ ggplot(tests_by_year_df, aes(x = FY, y = Value, fill = Stat)) +
   theme(text = element_text(size= 14), legend.position = "bottom") 
 
 ```
+The tables and charts below show a breakdown of systems by the number of tests required before the system achieved a passing result. Data from FY23, FY24, and FY25 is broken out by year to highlight trends since the end of the initial pilot study. 
 
+Note that systems that have failed at least one test and have not yet passed are not represented here. 
 
 ```{r tests_to_pass}
 
@@ -146,7 +140,8 @@ kable(
   mutate(percent_total = percent(frac_total, accuracy = 0.1)) %>%
   select(-frac_total), 
   col.names = c("Number of Tests", "Number of Systems", "Percentage of Total"), 
-  caption = "Number of Tests to Pass: All Years"
+  caption = "Number of Tests Required to Pass: All Years",
+  align = "l"
 )
  
 #FY23 Only
@@ -161,7 +156,8 @@ kable(
   mutate(percent_total = percent(frac_total, accuracy = 0.1)) %>%
   select(-frac_total), 
   col.names = c("Number of Tests", "Number of Systems", "Percentage of Total"), 
-  caption = "Number of Tests to Pass: FY23 Only"
+  caption = "Number of Tests Required to Pass: FY23 Only",
+  align = "l"
 )
 
 #FY24 Only
@@ -176,7 +172,8 @@ kable(
   mutate(percent_total = percent(frac_total, accuracy = 0.1)) %>%
   select(-frac_total), 
   col.names = c("Number of Tests", "Number of Systems", "Percentage of Total"), 
-  caption = "Number of Tests to Pass: FY24 Only"
+  caption = "Number of Tests Required to Pass: FY24 Only",
+  align = "l"
 )
 
 #FY25 Only
@@ -191,18 +188,15 @@ kable(
   mutate(percent_total = percent(frac_total, accuracy = 0.1)) %>%
   select(-frac_total), 
   col.names = c("Number of Tests", "Number of Systems", "Percentage of Total"), 
-  caption = "Number of Tests to Pass: FY25 Only"
+  caption = "Number of Tests Required to Pass: FY25 Only",
+  align = "l"
 )
   
-
-```
-
-```{r tests_to_pass_bar_chart}
 
 # All tests
 ggplot(all_sys_passed, aes(x = num_tests, y = frac_total)) +
   geom_bar(stat = "identity", fill = "blue") + 
-  geom_text(aes(label = percent(frac_total, accuracy = 0.1), vjust = -0.5, size = 3)) + 
+  geom_text(aes(label = percent(frac_total, accuracy = 0.1), vjust = -0.5)) + 
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) + 
   labs(title = "Tests Required to Pass: All Years", x = "Number of Tests", y = "% of Systems") + 
   ggeasy::easy_center_title() + 
@@ -217,7 +211,7 @@ all_sys_passed_fy23_through_fy25 <- rbind(
 ggplot(all_sys_passed_fy23_through_fy25, aes(x = num_tests, y = frac_total)) +
   geom_bar(stat = "identity", fill = "blue") + 
   facet_wrap(~fy, ncol = 1) + 
-  geom_text(aes(label = percent(frac_total, accuracy = 0.1), vjust = -0.5, size = 3)) + 
+  geom_text(aes(label = percent(frac_total, accuracy = 0.1), vjust = -0.5)) + 
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) + 
   labs(title = "Tests Required to Pass: 2023 - 2025", x = "Number of Tests", y = "% of Systems") + 
   ggeasy::easy_center_title() + 
@@ -225,8 +219,11 @@ ggplot(all_sys_passed_fy23_through_fy25, aes(x = num_tests, y = frac_total)) +
 
 
 ```
+The tables below give the average (mean) number of tests required for systems to pass, broken down by fiscal year and by contractor. 
 
-```{r avg_tests_to_pass_by_year}
+Note that the contractor listed here is the construction contractor listed in Cipit and does not account for subcontracting.
+
+```{r avg_tests_to_pass}
 kable(
   filter(systems, !is.na((tests_to_pass))) %>%
   group_by(first_test_fy) %>%
@@ -234,11 +231,10 @@ kable(
             avg_tests_to_pass = mean(tests_to_pass)),
   digits = 2,
   caption = "Average Number of Tests to Pass by Fiscal Year",
-  col.names = c("Fiscal Year of First Test", "Number of Systems Passed", "Average Number of Tests to Pass")
+  col.names = c("Fiscal Year of First Test", "Number of Systems Passed", "Average Number of Tests to Pass"),
+  align = "l"
 )
-```
 
-```{r tests_to_pass_by_contractor}
 kable(
   filter(systems, !is.na((tests_to_pass))) %>%
   group_by(contractor) %>%
@@ -247,9 +243,12 @@ kable(
   arrange(select(., 3)),
   digits = 2,
   caption = "Average Number of Tests to Pass by Contractor",
-  col.names = c("Contractor", "Number of Systems Passed", "Average Number of Tests to Pass")
+  col.names = c("Contractor", "Number of Systems Passed", "Average Number of Tests to Pass"),
+  align = "l"
 )
 ```
+
+The table below gives the median of the max recession rate, broken down by fiscal year. Tests for which a recession rate was not calculated are not represented. 
 
 ```{r med_rr_by_fy}
 kable(
@@ -258,13 +257,16 @@ kable(
     summarize(med_rr = median(rr, na.rm = TRUE)),
   digits = 2,
   caption = "Median of Max Recession Rate by Fiscal Year", 
-  col.names = c("Fiscal Year", "Median of Max Recession Rate")
+  col.names = c("Fiscal Year", "Median of Max Recession Rate"),
+  align = "l"
 )
 
 ```
 
+The plot below is a timeseries of max recession rates of both passing (blue) and failing (red) tests. The long-dashed line is the best fit line based on a linear fit. The short-dashed line represent a 1-inch/hour recession rate, which has been used as the maximum allowable recession rate for most tests. Two outliers with recession rates over 16 in/hr are omitted from the plot and disregarded from the fit line, as are any tests without a recorded recession rate.
+
 ```{r max_rr_ts}
-fy_starts <- seq(from = date_from_char("7/1/2020"), by = "year", length.out = 5)
+fy_starts <- seq(from = date_from_char("7/1/2020"), by = "year", length.out = 6)
 ggplot(data = tests, mapping = aes(x = date, y = rr, color = result)) + 
   geom_point() + 
   scale_y_continuous(breaks = seq(from = 0, to = 16, by = 2), limits = c(0, 16)) +
@@ -274,12 +276,13 @@ ggplot(data = tests, mapping = aes(x = date, y = rr, color = result)) +
   annotate("text", x = date_from_char("2/15/2020"), y = 0.6, label = "1 in/hr Limit") + 
   scale_x_date(breaks = fy_starts,
                date_minor_breaks = "3 months",
-               limits = c(date_from_char("1/1/2020"), date_from_char("4/1/2025"))
+               limits = c(date_from_char("1/1/2020"), date_from_char("7/1/2025"))
   ) +
   labs(title = "Timeseries of Max Recession Rates", x = "Date", y = "Maximum Recession Rate (in/hr)") + 
   theme(legend.position = "bottom", plot.title = element_text(size = 12), legend.title=element_blank()) + 
   ggeasy::easy_center_title()
 ```
+The plot below is a timeseries of the percentage of the max storage depth filled for both passing (blue) and failing (red) tests. The long-dashed line is the best fit line based on a linear fit. The short-dashed line is at 100%. Tests without a recorded depth filled or storage depth are omitted.
 
 
 ```{r percent_filed_ts}
@@ -291,22 +294,25 @@ ggplot(data = tests, mapping = aes(x = date, y = filled, color = result)) +
   stat_smooth(method = "lm", formula = y~x, se=FALSE, linetype = "dashed", color = "black") + 
   annotate("text", x = date_from_char("2/15/2021"), y = 0.835, label = "Linear Fit", angle = 3) + 
   geom_hline(yintercept = 1, linetype = "dashed") + 
-  annotate("text", x = date_from_char("5/1/2020"), y = 1.06, label = "1 in/hr Limit") + 
   scale_x_date(breaks = fy_starts,
                date_minor_breaks = "3 months",
-               limits = c(date_from_char("1/1/2020"), date_from_char("4/1/2025"))
+               limits = c(date_from_char("1/1/2020"), date_from_char("7/1/2025"))
   ) +
   labs(title = "Timeseries of Percent Storage Depth Filled", x = "Date", y = "Percent Filled") + 
   theme(legend.position = "bottom", plot.title = element_text(size = 12), legend.title=element_blank()) + 
   ggeasy::easy_center_title()
 ```
+The stats below are intended to show how the passing rates so far in FY25 would be impacted by lowering the maximum allowable recession rate to 0.5 inches/hour.
 
 ```{r passes_with_low_rr}
 # Calculate the number and percent of systems first tested in FY25 that would meet the 0.5 in/hr limit
 n_pass_FY25 <- nrow(filter(tests, FY == 2025 & result == "Pass"))
 n_pass_FY25_low_rr <- nrow(filter(tests, FY == 2025 & result == "Pass" & rr < 0.5))
-print(paste0("Total Passes in FY25 so far: ", n_pass_FY25))
-print(paste0("Passes in FY25 with max recession rate below 0.5 in/hr: ", n_pass_FY25_low_rr))
-print(paste0("Percent of FY25 passes with max rr below 0.5 in/hr: ", percent(n_pass_FY25_low_rr/n_pass_FY25, accuracy = 2)))
+cat(
+  paste0("Total Passes in FY25 so far: ", n_pass_FY25, "\n", 
+              "Passes in FY25 with max recession rate below 0.5 in/hr: ", n_pass_FY25_low_rr, "\n",
+              "Percent of FY25 passes with max rr below 0.5 in/hr: ", 
+                percent(n_pass_FY25_low_rr/n_pass_FY25, accuracy = 2))
+)
 
 ```
